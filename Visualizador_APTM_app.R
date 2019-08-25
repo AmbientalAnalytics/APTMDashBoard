@@ -9,9 +9,11 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(plotly)
-
+library(data.table)
 # Cargando datos ----
 demo <- read.xlsx("GPS - COLUMNAS ESTIMATIVAS A MOSTRAR EN UBICACIÓN GEOGRÁFICA.xlsx", rows = 3:13, colNames = T)
+
+dpto <- st_read('./datos/Deptos.gpkg', 'Deptos', stringsAsFactors = FALSE)
 
 # Explorando datos ----
 # str(demo)
@@ -24,9 +26,12 @@ demo1 <- gather(demo, key = "asociacion", value = "valor", c("APTM","CAMARA","AC
 demo1 <- demo1 %>% filter(valor == 1) # seleccionando solo valores unicos
 demo1$lat <- demo1$lat*-1 # conviertiendo latitud en negativo
 demo1$lon <- demo1$lon*-1 # conviertiendo longitud en negativo
+demo1$MUNICIPIO <- gsub("                     ", "", demo1$MUNICIPIO)
+demo1$MUNICIPIO <- gsub("                ", "", demo1$MUNICIPIO)
+demo1$MUNICIPIO <- gsub("   ", "", demo1$MUNICIPIO)
+
 asociados <- st_as_sf(demo1, coords = c("lon", "lat"), crs = 4326) # converción a un sf object
 
-# data <- melt(Demo, id.vars="Cliente", measure.vars=paste0(rep("Mes.", 12), seq(1:12)), value.name="Mes")
 # # Maxi ----
 # ## Cambiar nombre de las columnas de los Meses
 # names(Demo)[10:21]<- c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic")
@@ -51,11 +56,17 @@ titlePanel("Visualizador APTM"),
                   label = "Elegir asociación:",
                   choices = c("Todos", unique(asociados$asociacion)),
                   selected = "Todos",
+                  multiple = FALSE),
+      selectInput(inputId = "Municipios",
+                  label = "Elegir municipio:",
+                  choices = c("Todos", unique(asociados$MUNICIPIO)),
+                  selected = "Todos",
                   multiple = FALSE)
     ),
     mainPanel(
-      leafletOutput("map", height = 300),
-      plotlyOutput(outputId = "plot", height = 300)
+      leafletOutput("map", height = 500),
+      plotlyOutput(outputId = "plot", height = 300),
+      dataTableOutput(outputId = 'TablaAsociados')
       #plotlyOutput(outputId = "linePlot")
     )
   )
@@ -67,34 +78,59 @@ server <- function(input, output){
   
   output$map <- renderLeaflet(
     {
-      if(input$Asociados == "Todos"){
-      }else{
+      if(input$Asociados != "Todos"){
         asociados <- asociados[which(asociados$asociacion == input$Asociados),]
       }
-      
+      if(input$Municipios != "Todos"){
+        print(input$Municipios)
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      m <- NULL
       m <- leaflet() %>%
         addTiles() %>%
         addProviderTiles("OpenStreetMap.Mapnik", group = "OpenStreetMap") %>%
         addProviderTiles("Esri.WorldImagery", group = "ESRI Aerial") %>%
-        addCircleMarkers(data=asociados, group="asociacion", radius = 10, opacity=1, color = "black",stroke=TRUE, fillOpacity = 0.75, weight=2,
-                         fillColor = "red", clusterOptions = TRUE, popup = paste0("Longitud: ", demo1$lon, "<br> Latitud: ", demo1$lat, "<br> Municipio: ", demo1$MUNICIPIO)) %>%
+        #setView(asociados$lon, dir$lat, zoom = 16) %>% 
+        addCircleMarkers(data=asociados, 
+                         #group="asociacion", 
+                         radius = 10, opacity=1, color = "black",stroke=TRUE, fillOpacity = 0.75, weight=2,
+                         fillColor = "red", clusterOptions = NULL, 
+                         options = markerClusterOptions(showCoverageOnHover = TRUE, zoomToBoundsOnClick = TRUE, spiderfyOnMaxZoom = FALSE, removeOutsideVisibleBounds = TRUE, spiderLegPolylineOptions = list(weight = 1.5, color = "#222", opacity = 0.5), freezeAtZoom = FALSE),
+                         popup = paste0("ID: ", demo1$ID, "<br> NOMBRE: ", demo1$NOMBRE, "<br> COLONIA: ", demo1$COLONIA)) %>%
         addLayersControl(
           baseGroups = c("OpenStreetMap", "ESRI Aerial"),
           #overlayGroups = c("Hot SPrings"),
-          options = layersControlOptions(collapsed = T))
+          options = layersControlOptions(collapsed = T)) %>% 
+        addPolygons(data = dpto, color = "#444444", weight = 1, smoothFactor = 0.5, opacity = 0.5, fillOpacity = 0.5, fillColor = "lightgrey", options = markerOptions(interactive = FALSE))
       
       m
     }
   )
+  # Table asociados ----
+  output$TablaAsociados <- renderDataTable(
+    {
+      if(input$Asociados != "Todos"){
+        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
+        #subset(demo1, asosiacion == input$Asociados)
+      }
+      if(input$Municipios != "Todos"){
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      st_drop_geometry(asociados[,c(1:4)])}
+      )
   # Grafico 1----
   output$plot <- renderPlotly(
     {
-      if(input$Asociados == "Todos"){
-      }else{
-        demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+      if(input$Asociados != "Todos"){
+        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
           #subset(demo1, asosiacion == input$Asociados)
       }
-      grafico_barra <- demo1 %>% ggplot(aes(x = asociacion)) +
+      if(input$Municipios != "Todos"){
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      grafico_barra <- asociados %>% ggplot(aes(x = asociacion)) +
         geom_bar(show.legend = F, fill = "lightblue", width = 0.7) +
         #scale_fill_brewer(palette = "Pastel1") +
         labs(title = "Dsitribución de asociados por Asociación",y = "Cantidad de asociados", x = "") +
