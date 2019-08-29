@@ -64,13 +64,20 @@ titlePanel("Visualizador APTM"),
                   multiple = FALSE)
     ),
     mainPanel(
-      leafletOutput("map", height = 500),
-      plotlyOutput(outputId = "plot", height = 300),
-      dataTableOutput(outputId = 'TablaAsociados')
-      #plotlyOutput(outputId = "linePlot")
-    )
-  )
+      tabsetPanel(
+        tabPanel("General", 
+          leafletOutput("map", height = 500),
+          plotlyOutput(outputId = "plot", height = 300),
+          plotlyOutput(outputId = "plot2", height = 300)
+          ),
+        tabPanel("tab 2", 
+                 leafletOutput("mapT2", height = 500),
+                 plotlyOutput(outputId = "plotT2", height = 300),
+                 dataTableOutput(outputId = 'TablaAsociados')),
+        tabPanel("tab 3", "contents3")
+      )
 )
+))
 
 
 # server ----
@@ -106,20 +113,8 @@ server <- function(input, output){
       m
     }
   )
-  # Table asociados ----
-  output$TablaAsociados <- renderDataTable(
-    {
-      if(input$Asociados != "Todos"){
-        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
-        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
-        #subset(demo1, asosiacion == input$Asociados)
-      }
-      if(input$Municipios != "Todos"){
-        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
-      }
-      st_drop_geometry(asociados[,c(1:4)])}
-      )
-  # Grafico 1----
+  
+  # Grafico asociados municipio----
   output$plot <- renderPlotly(
     {
       if(input$Asociados != "Todos"){
@@ -130,8 +125,8 @@ server <- function(input, output){
       if(input$Municipios != "Todos"){
         asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
       }
-      grafico_barra <- asociados %>% ggplot(aes(x = asociacion)) +
-        geom_bar(show.legend = F, fill = "lightblue", width = 0.7) +
+      grafico_barra <- asociados %>% ggplot(aes(x = asociacion, fill = MUNICIPIO)) +
+        geom_bar(show.legend = F, position = 'stack', width = 0.7) +
         #scale_fill_brewer(palette = "Pastel1") +
         labs(title = "Dsitribución de asociados por Asociación",y = "Cantidad de asociados", x = "") +
         xlim("APTM", "ACTIM", "CAMARA") +
@@ -144,23 +139,99 @@ server <- function(input, output){
     }
   )
   
-  # # Grafico 2 ----
-  # output$linePlot <- renderPlotly(
-  #   {
-  #     if(input$clientes == "Todos"){
-  #     }else{
-  #       tabla_clientes <- subset(tabla_clientes, Cliente == input$clientes)
-  #     }
-  #     grafico_linha <- tabla_clientes %>% ggplot(aes(Mes, Ventas, group = Cliente, colour = Cliente)) +
-  #       geom_line(stat = "identity", show.legend = F) #+
-  #     #scale_y_continuous() +
-  #     #scale_fill_brewer(palette = 1) +
-  #     #scale_y_continuous(breaks = c(0, 300000,600000))
-  #     
-  #     grafico_linha + theme_minimal()
-  #     ggplotly(grafico_linha) 
-  #   }
-  # )
+  # Grafico produccion municipio----
+  output$plot2 <- renderPlotly(
+    {
+      if(input$Asociados != "Todos"){
+        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
+        #subset(demo1, asosiacion == input$Asociados)
+      }
+      if(input$Municipios != "Todos"){
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      grafico_barra2 <- asociados %>% ggplot(aes(x = asociacion, y = KILOS, fill = MUNICIPIO)) +
+        geom_bar(show.legend = F, stat = 'identity', width = 0.7) +
+        #scale_fill_brewer(palette = "Pastel1") +
+        labs(title = "Dsitribución de asociados por Asociación",y = "Cantidad de asociados", x = "") +
+        xlim("APTM", "ACTIM", "CAMARA") +
+        theme_classic()
+      
+      #scale_y_continuous(breaks = c(0, 300000,600000), labels = dollar)
+      
+      
+      ggplotly(grafico_barra2) 
+    }
+  )
+  # mapa tab panel 2 ----
+  output$mapT2 <- renderLeaflet(
+    {
+      if(input$Asociados != "Todos"){
+        asociados <- asociados[which(asociados$asociacion == input$Asociados),]
+      }
+      if(input$Municipios != "Todos"){
+        print(input$Municipios)
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      m <- NULL
+      m <- leaflet() %>%
+        addTiles() %>%
+        addProviderTiles("OpenStreetMap.Mapnik", group = "OpenStreetMap") %>%
+        addProviderTiles("Esri.WorldImagery", group = "ESRI Aerial") %>%
+        #setView(asociados$lon, dir$lat, zoom = 16) %>% 
+        addCircleMarkers(data=asociados, 
+                         #group="asociacion", 
+                         radius = 10, opacity=1, color = "black",stroke=TRUE, fillOpacity = 0.75, weight=2,
+                         fillColor = "red", clusterOptions = NULL, 
+                         options = markerClusterOptions(showCoverageOnHover = TRUE, zoomToBoundsOnClick = TRUE, spiderfyOnMaxZoom = FALSE, removeOutsideVisibleBounds = TRUE, spiderLegPolylineOptions = list(weight = 1.5, color = "#222", opacity = 0.5), freezeAtZoom = FALSE),
+                         popup = paste0("ID: ", demo1$ID, "<br> NOMBRE: ", demo1$NOMBRE, "<br> COLONIA: ", demo1$COLONIA)) %>%
+        addLayersControl(
+          baseGroups = c("OpenStreetMap", "ESRI Aerial"),
+          #overlayGroups = c("Hot SPrings"),
+          options = layersControlOptions(collapsed = T)) %>% 
+        addPolygons(data = dpto, color = "#444444", weight = 1, smoothFactor = 0.5, opacity = 0.5, fillOpacity = 0.5, fillColor = "lightgrey", options = markerOptions(interactive = FALSE))
+      
+      m
+    }
+  )
+  # tabela tab panel 2 ----
+  # Table asociados ----
+  output$TablaAsociados <- renderDataTable(
+    {
+      if(input$Asociados != "Todos"){
+        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
+        #subset(demo1, asosiacion == input$Asociados)
+      }
+      if(input$Municipios != "Todos"){
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      st_drop_geometry(asociados[,c(1:4)])}
+  )
+  # Grafico tab panel 2----
+  output$plotT2 <- renderPlotly(
+    {
+      if(input$Asociados != "Todos"){
+        #demo1 <- demo1[which(demo1$asociacion == input$Asociados),]
+        asociados <- asociados[which(demo1$asociacion == input$Asociados),]
+        #subset(demo1, asosiacion == input$Asociados)
+      }
+      if(input$Municipios != "Todos"){
+        asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
+      }
+      grafico_barra <- asociados %>% ggplot(aes(x = asociacion)) +
+        geom_bar(show.legend = F, fill = "lightblue", width = 0.7) +
+        #scale_fill_brewer(palette = "Pastel1") +
+        labs(title = "Dsitribución de asociados por Asociación",y = "Cantidad de asociados", x = "") +
+        xlim("APTM", "ACTIM", "CAMARA") +
+        theme_classic()
+      
+      #scale_y_continuous(breaks = c(0, 300000,600000), labels = dollar)
+      
+      
+      ggplotly(grafico_barra) 
+    }
+  )
 }
 
 # app ----
