@@ -82,6 +82,23 @@ titlePanel("Visualizador APTM"),
 
 # server ----
 server <- function(input, output){
+  getColor2 <- function(quakes) {
+    sapply(quakes$asociacion, function(mag) {
+      if(mag == 'APTM') {
+        "green"
+      } else if(mag == "CAMARA") {
+        "orange"
+      } else {
+        "red"
+      } })
+  }  
+  getColor <- function(datos) {
+    sapply(datos$asociacion, function(pos) {
+      #if(pos == 'APTM') {"green"} 
+      #ifelse( if ( pos == 'APTM'){ 'green')} else(pos == 'CAMARA', "yellow", "red")
+      ifelse(pos == "APTM","green", ifelse ( pos == "CAMARA", "yeallow", "red"))
+      } )
+  }
   
   output$map <- renderLeaflet(
     {
@@ -92,21 +109,22 @@ server <- function(input, output){
         print(input$Municipios)
         asociados <- asociados[which(asociados$MUNICIPIO == input$Municipios),]
       }
+      icons <- awesomeIcons(
+        icon = 'ios-close',
+        iconColor = 'black',
+        library = 'ion',
+        markerColor = getColor2(asociados)
+      )
       m <- NULL
       m <- leaflet() %>%
         addTiles() %>%
         addProviderTiles("OpenStreetMap.Mapnik", group = "OpenStreetMap") %>%
         addProviderTiles("Esri.WorldImagery", group = "ESRI Aerial") %>%
         #setView(asociados$lon, dir$lat, zoom = 16) %>% 
-        addCircleMarkers(data=asociados, 
-                         #group="asociacion", 
-                         radius = 10, opacity=1, color = "black",stroke=TRUE, fillOpacity = 0.75, weight=2,
-                         fillColor = "red", clusterOptions = NULL, 
-                         options = markerClusterOptions(showCoverageOnHover = TRUE, zoomToBoundsOnClick = TRUE, spiderfyOnMaxZoom = FALSE, removeOutsideVisibleBounds = TRUE, spiderLegPolylineOptions = list(weight = 1.5, color = "#222", opacity = 0.5), freezeAtZoom = FALSE),
-                         popup = paste0("ID: ", demo1$ID, "<br> NOMBRE: ", demo1$NOMBRE, "<br> COLONIA: ", demo1$COLONIA)) %>%
+        #addCircleMarkers(data=asociados, group="asociacion",radius = 10, opacity=1, color = "black",stroke=TRUE, fillOpacity = 0.75, weight=2, fillColor = "red", clusterOptions = NULL, options = markerClusterOptions(showCoverageOnHover = TRUE, zoomToBoundsOnClick = TRUE, spiderfyOnMaxZoom = FALSE, removeOutsideVisibleBounds = TRUE, spiderLegPolylineOptions = list(weight = 1.5, color = "#222", opacity = 0.5), freezeAtZoom = FALSE), popup = paste0("ID: ", demo1$ID, "<br> NOMBRE: ", demo1$NOMBRE, "<br> COLONIA: ", demo1$COLONIA)) 
+        addAwesomeMarkers(data=asociados, icon = icons, popup = paste0("ID: ", demo1$ID, "<br> NOMBRE: ", demo1$NOMBRE, "<br> COLONIA: ", demo1$COLONIA)) %>%
         addLayersControl(
           baseGroups = c("OpenStreetMap", "ESRI Aerial"),
-          #overlayGroups = c("Hot SPrings"),
           options = layersControlOptions(collapsed = T)) %>% 
         addPolygons(data = dpto, color = "#444444", weight = 1, smoothFactor = 0.5, opacity = 0.5, fillOpacity = 0.5, fillColor = "lightgrey", options = markerOptions(interactive = FALSE))
       
@@ -153,7 +171,7 @@ server <- function(input, output){
       grafico_barra2 <- asociados %>% ggplot(aes(x = asociacion, y = KILOS, fill = MUNICIPIO)) +
         geom_bar(show.legend = F, stat = 'identity', width = 0.7) +
         #scale_fill_brewer(palette = "Pastel1") +
-        labs(title = "Dsitribución de asociados por Asociación",y = "Cantidad de asociados", x = "") +
+        labs(title = "Dsitribución de producción por Asociación",y = "Cantidad de asociados", x = "") +
         xlim("APTM", "ACTIM", "CAMARA") +
         theme_classic()
       
